@@ -1,6 +1,3 @@
-import sys
-sys.path.append('utils')  # Add the utils directory to the Python path
-
 from utils.preprocess import load_and_preprocess_data
 from utils.dataset import CustomDataset
 from utils.model import initialize_model, train_and_evaluate, save_model
