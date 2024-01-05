@@ -1,15 +1,15 @@
 import sys
-sys.path.append('src')  # Include the src directory in the Python path
+sys.path.append('utils')  # Add the utils directory to the Python path
 
-from src.preprocess import load_and_preprocess_data
-from src.dataset import CustomDataset
-from src.model import initialize_model, train_and_evaluate, save_model
+from utils.preprocess import load_and_preprocess_data
+from utils.dataset import CustomDataset
+from utils.model import initialize_model, train_and_evaluate, save_model
 from transformers import BertTokenizer
 from torch.utils.data import DataLoader
 import torch
 
 # File path
-data_file_path = './data/MaSaC_train_efr.json'
+data_file_path = '../../data/MaSaC_train_efr.json'
 
 # Load and preprocess data
 train_df, val_df = load_and_preprocess_data(data_file_path)
@@ -36,5 +36,5 @@ model.to(device)
 train_and_evaluate(model, train_dl, val_dl, device, optimizer, criterion, num_epochs=3)
 
 # Save the model
-model_save_path = './src/bert_classification_model'
+model_save_path = './utils/bert_classification_model'
 save_model(model, model_save_path)
