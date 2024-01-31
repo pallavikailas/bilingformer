@@ -1,27 +1,29 @@
 import json
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
 
-def load_and_preprocess_data(file_path):
+def load_data(file_path):
     with open(file_path, 'r') as file:
         data = json.load(file)
-    
-    utterances, emotions = [], []
+    return data
+
+def prepare_data(data, emotion_to_label, trigger_to_label):
+    utterances = []
+    emotions = []
+    triggers = []
     for item in data:
         utterances.extend(item['utterances'])
         emotions.extend(item['emotions'])
-    
-    emotion_to_label = {
-        'neutral': 0, 
-        'joy': 1, 
-        'contempt': 2, 
-        'anger': 3,
-        'surprise': 4,
-        'fear': 5, 
-        'disgust': 6,
-        'sadness': 7
-    }
+        triggers.extend(item['triggers'])
+    triggers = [convert_to_int_or_nan(t) for t in triggers]
     labels = [emotion_to_label[emotion] for emotion in emotions]
-    df = pd.DataFrame({'utterances': utterances, 'labels': labels})
+    trigger_labels = [trigger_to_label.get(t, t) for t in triggers]
+    return pd.DataFrame({'utterances': utterances, 'labels': labels, 'triggers': trigger_labels})
 
-    return train_test_split(df, test_size=0.2, random_state=42)
+def convert_to_int_or_nan(t):
+    if not pd.isna(t):
+        try:
+            return int(t)
+        except ValueError:
+            return 'nan'
+    return 'nan'
