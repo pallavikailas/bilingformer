@@ -1,57 +1,32 @@
 import torch
-from torch.utils.data import DataLoader
-from transformers import BertTokenizer, BertForSequenceClassification, AdamW
-from sklearn.metrics import accuracy_score
-from tqdm import tqdm
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoModelForSeq2SeqLM
 
-def initialize_model(num_labels):
-    model = BertForSequenceClassification.from_pretrained('bert-base-multilingual-cased', num_labels=num_labels)
-    optimizer = AdamW(model.parameters(), lr=2e-5)
-    criterion = torch.nn.CrossEntropyLoss()
-    return model, optimizer, criterion
+class T5ForBinaryClassification(nn.Module):
+    def __init__(self, pretrained_model=model_path):
+        super().__init__()
+        self.t5 = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model)
+        self.classifier = torch.nn.Linear(self.t5.config.d_model, 1)
+        # Additional linear layer to transform the dimensions
+        self.pre_classifier = torch.nn.Linear(self.t5.config.vocab_size, self.t5.config.d_model)
 
-def train_and_evaluate(model, train_dl, val_dl, device, optimizer, criterion, num_epochs=3):
-    for epoch in range(num_epochs):
-        model.train()
-        total_loss, total_correct, total_samples = 0, 0, 0
-        for batch in tqdm(train_dl, desc=f"Epoch {epoch + 1}/{num_epochs}"):
-            input_ids = batch['input_ids'].to(device)
-            token_type_ids = batch['token_type_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+    def forward(self, input_ids, attention_mask, decoder_input_ids):
+        outputs = self.t5(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
+        # Extract the logits of the first token and transform dimensions
+        first_token_logits = outputs.logits[:, 0, :]
+        transformed_logits = self.pre_classifier(first_token_logits)
+        return self.classifier(transformed_logits)
 
-            optimizer.zero_grad()
-            outputs = model(input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
-            loss.backward()
-            optimizer.step()
+class BinaryFocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0):
+        super(BinaryFocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
 
-            total_loss += loss.item()
-            preds = torch.argmax(outputs.logits, dim=1)
-            total_correct += torch.sum(preds == labels).item()
-            total_samples += labels.size(0)
-
-        average_loss = total_loss / len(train_dl)
-        train_accuracy = total_correct / total_samples
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Loss: {average_loss:.4f}, Training Accuracy: {train_accuracy:.4f}")
-
-        model.eval()
-        val_labels, val_preds = [], []
-        with torch.no_grad():
-            for batch in tqdm(val_dl, desc="Validation"):
-                input_ids = batch['input_ids'].to(device)
-                token_type_ids = batch['token_type_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['labels'].to(device)
-
-                outputs = model(input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask)
-                preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
-
-                val_labels.extend(labels.cpu().numpy())
-                val_preds.extend(preds)
-
-        accuracy = accuracy_score(val_labels, val_preds)
-        print(f"Validation Accuracy: {accuracy:.4f}")
-
-def save_model(model, path):
-    model.save_pretrained(path)
+    def forward(self, inputs, targets):
+        inputs = inputs.squeeze() 
+        BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets.float(), reduction='none')
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+        
