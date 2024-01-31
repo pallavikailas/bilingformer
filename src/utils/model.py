@@ -30,3 +30,10 @@ class BinaryFocalLoss(nn.Module):
         pt = torch.exp(-BCE_loss)
         F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
         
+num_classes = 1
+criterion = BinaryFocalLoss()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = T5ForBinaryClassification(model_path)
+model.to(device)
+optimizer = AdamW(model.parameters(), lr=2e-5)
+scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
