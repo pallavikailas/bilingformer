@@ -6,34 +6,26 @@ from transformers import AutoModelForSeq2SeqLM
 class T5ForBinaryClassification(nn.Module):
     def __init__(self, pretrained_model=model_path):
         super().__init__()
-        self.t5 = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model)
-        self.classifier = torch.nn.Linear(self.t5.config.d_model, 1)
-        # Additional linear layer to transform the dimensions
-        self.pre_classifier = torch.nn.Linear(self.t5.config.vocab_size, self.t5.config.d_model)
+        self.t5 = AutoModelForSeq2SeqLM.from_pretrained(pretrained_model)  # Load the pre-trained T5 model
+        self.classifier = nn.Linear(self.t5.config.d_model, 1)  # Classifier for binary classification
+        self.pre_classifier = nn.Linear(self.t5.config.vocab_size, self.t5.config.d_model)  # Pre-classifier layer
 
     def forward(self, input_ids, attention_mask, decoder_input_ids):
         outputs = self.t5(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
-        # Extract the logits of the first token and transform dimensions
-        first_token_logits = outputs.logits[:, 0, :]
-        transformed_logits = self.pre_classifier(first_token_logits)
-        return self.classifier(transformed_logits)
+        first_token_logits = outputs.logits[:, 0, :]  # Get the logits for the first token
+        transformed_logits = self.pre_classifier(first_token_logits)  # Transform the logits
+        return self.classifier(transformed_logits)  # Return the final classification logits
 
 class BinaryFocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0):
-        super(BinaryFocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
+        super().__init__()
+        self.alpha = alpha  # Alpha parameter for focal loss
+        self.gamma = gamma  # Gamma parameter for focal loss
 
     def forward(self, inputs, targets):
-        inputs = inputs.squeeze() 
+        inputs = inputs.squeeze()  # Squeeze inputs to remove any extra dimensions
         BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets.float(), reduction='none')
-        pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
-        
-num_classes = 1
-criterion = BinaryFocalLoss()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = T5ForBinaryClassification(model_path)
-model.to(device)
-optimizer = AdamW(model.parameters(), lr=2e-5)
-scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
+        pt = torch.exp(-BCE_loss)  # Calculate pt as per the focal loss formula
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss  # Calculate the final focal loss
+        return F_loss.mean()  # Return the mean focal loss
+
